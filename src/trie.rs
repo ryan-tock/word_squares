@@ -1,45 +1,67 @@
+use itertools::Itertools;
 use std::fmt;
 use std::fmt::Formatter;
-use itertools::Itertools;
 
 pub struct TrieNode {
-    pub children: Box<[Option<TrieNode>; 26]>,
+    pub has_children: bool,
+    pub children: [Option<Box<TrieNode>>; 26],
 }
+
 impl TrieNode {
     pub fn from_words(sorted_words: &Vec<&str>) -> Self {
-        if sorted_words[0].len() == 0 {
+        let mut children = [const { None }; 26];
+        if sorted_words.is_empty() || sorted_words[0].is_empty() {
             return TrieNode {
-                children: Box::new(std::array::from_fn(|_| None)),
-            }
+                has_children: false,
+                children,
+            };
         }
-        let mut children: Box<[Option<TrieNode>; 26]> = Box::new(std::array::from_fn(|_| None));
-        let mut active_letter = sorted_words[0].chars().next().unwrap();
-        let mut active_words = Vec::new();
 
-        for &word in sorted_words {
-            if word.chars().next().unwrap() == active_letter {
-                active_words.push(&word[1..]);
-            } else {
+        let mut active_words = Vec::new();
+        let mut active_letter = sorted_words[0].chars().next().unwrap() as u8 - 65;
+
+        for word in sorted_words {
+            if !word.starts_with((active_letter + 65) as char) {
                 active_words.sort();
-                let new_node = TrieNode::from_words(&active_words);
-                children[active_letter as usize - 65] = Some(new_node);
-                active_letter = word.chars().next().unwrap();
-                active_words = vec!(&word[1..]);
+                children[active_letter as usize] = Some(Box::new(Self::from_words(&active_words)));
+                active_letter = word.chars().next().unwrap() as u8 - 65;
+                active_words.clear();
             }
+            active_words.push(&word[1..]);
         }
         active_words.sort();
-        let new_node = TrieNode::from_words(&active_words);
-        children[active_letter as usize - 65] = Some(new_node);
+        children[active_letter as usize] = Some(Box::new(Self::from_words(&active_words)));
 
         TrieNode {
+            has_children: true,
             children,
         }
+    }
+
+    pub fn leaf_nodes(&self) -> usize {
+        if !self.has_children {
+            return 1;
+        }
+        let mut total = 0;
+        for i in 0..26 {
+            if self.children[i].is_some() {
+                total += self.children[i].as_ref().unwrap().leaf_nodes();
+            }
+        }
+
+        total
     }
 }
 
 impl fmt::Debug for TrieNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let letters = (0..26).filter(|i| match self.children[*i] {Some(_) => true, _ => false}).map(|i| (i + 65) as u8 as char).collect_vec();
+        let letters = (0..26usize)
+            .filter(|&i| match self.children[i] {
+                Some(_) => true,
+                _ => false,
+            })
+            .map(|i| (i + 65) as u8 as char)
+            .collect_vec();
         write!(f, "{letters:?}")
     }
 }
